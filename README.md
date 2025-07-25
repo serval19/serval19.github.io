@@ -1,3 +1,3 @@
-# My Portfolio Website
-This repository contains the code of my portfolio website.
+# My Website
+This repository contains the code of my website.
 https://serval19.github.io/
