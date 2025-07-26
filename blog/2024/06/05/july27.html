@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="author"
+    content="Matteo Malvica">
+<meta name="description"
+    content="Introduction Originally, I intended to write a simple note on the Maglev compiler and how to adjust V8 shellcode from Linux to Windows. But as I started, the project grew unexpectedly. I found myself diving into some prerequisites like the V8 pipeline and a root cause analysis of CVE-2023-4069, the bug we are about to explore.
+What began as a brief memo soon unfolded into a deeper exploration and I hope the reader will find some benefits from these additional insights." />
+<meta name="keywords" content="" />
+<meta name="robots" content="noodp" />
+<title>
+    Types of people I've met
+</title>
+	<link rel="canonical" href="https://www.matteomalvica.com/blog/2024/06/05/intro-v8-exploitation-maglev.html" />
+<link href="../../../../ajax/libs/flag-icon-css/3.2.1/css/flag-icon.min.css" rel="stylesheet"
+    type="text/css">
+<link rel="stylesheet" href="../../../../main.min.ff759f2a796cae22d12f15d9ed52bb682ec25fbef0e2d95a2ae9e53f30536694.css">
+<link rel="apple-touch-icon" sizes="180x180" href="../../../../apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../../../../favicon-16x16.png">
+<link rel="manifest" href="https://www.matteomalvica.com/site.webmanifest">
+<link rel="mask-icon" href="../../../../safari-pinned-tab.svg" color="#252627">
+<link rel="shortcut icon" href="../../../../favicon.ico">
+<meta name="theme-color" content="#252627">
+  <meta itemprop="name" content="An Introduction to Chrome Exploitation  - Maglev Edition">
+  <meta itemprop="description" content="An Introduction to Chrome Exploitation  - Maglev Edition">
+  <meta itemprop="datePublished" content="2024-06-05T00:00:00+00:00">
+  <meta itemprop="dateModified" content="2024-06-05T00:00:00+00:00">
+  <meta itemprop="wordCount" content="14012">
+  <meta itemprop="image" content="https://www.matteomalvica.com/img/v8/train.png">
+  <meta itemprop="keywords" content="V8,Exploitation,Maglev,Chrome">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://www.matteomalvica.com/img/v8/train.png">
+  <meta name="twitter:title" content="An Introduction to Chrome Exploitation  - Maglev Edition">
+  <meta name="twitter:description" content="An Introduction to Chrome Exploitation  - Maglev Edition">
+<meta property="article:published_time" content="2024-06-05 00:00:00 &#43;0000 UTC" />
+    </head>
+    <body class="dark-theme">
+        <div class="container">
+            <header class="header">
+    <span class="header__inner">
+        <a href="../../../../index.html" style="text-decoration: none;">
+    <div class="logo">
+            <span class="logo__mark">></span>
+            <span class="logo__text">/home/serval</span>
+            <span class="logo__cursor"></span>
+    </div>
+</a>
+        <span class="header__right">
+                <nav class="menu">
+    <ul class="menu__inner"><li><a href="../../../../blog.html">blog</a></li><li><a href="../../../../whoami.html">whoami</a></li>
+    </ul>
+</nav>
+                <span class="menu-trigger">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+                    </svg>
+                </span>
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-18TCRTW8CL"></script>
+      <script>
+        var doNotTrack = false;
+        if ( false ) {
+          var dnt = (navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack);
+          var doNotTrack = (dnt == "1" || dnt == "yes");
+        }
+        if (!doNotTrack) {
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'G-18TCRTW8CL');
+        }
+      </script>
+                <script async src="https://www.googletagmanager.com/gtag/js?id=G-RE0LE7QK5X"></script>
+                <script>
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'G-RE0LE7QK5X');
+                </script>
+            <span class="theme-toggle"><svg class="theme-toggler" width="24" height="24" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M22 41C32.4934 41 41 32.4934 41 22C41 11.5066 32.4934 3 22
+  3C11.5066 3 3 11.5066 3 22C3 32.4934 11.5066 41 22 41ZM7 22C7
+  13.7157 13.7157 7 22 7V37C13.7157 37 7 30.2843 7 22Z"/>
+</svg>
+</span>
+        </span>
+    </span>
+</header>
+            <div class="content">
+    <main class="post">
+        <div class="post-info">
+            </p>
+        </div>
+        <article>
+            <h1 class="post-title"><a href="../../../../blog/2024/06/05/intro-v8-exploitation-maglev.html">Types of people I've met</a></h1>
+            <div class="post-content">
+  <img src="../../../../img/v8/maglev.png"  alt="PRE"  class="center"  />
+<h2 id="introduction">Introduction</h2>
+<p>PEOPLE : one thing that every introvert can agree they hate the most. Let it be some guys you know or random strangers,
+    the level of dislike can vary. You can't live in this world without them but you get nervous when meeting 
+    new people(not always though). Now let's take a peek at some of the types of people I have met in my life.
+    For the sake of their privacy, I will not be using their real names.
+</p>
+<h2 id="introduction">Types of People</h2>
+<p><strong>The psychopaths</strong>: I've known well 3 psychopaths during the last 5 years. 2 of them
+were drowning in depression and anger related issues. The first guy i've known from school. He used to get
+really angry even at small things. He also told us that he was taking medicines for anger issues and I didn't knew
+he was a psycho until he revealed it to me after 1-2 years. He also tried to take his own life, broke his father's arm once. Last time
+when i contacted him, he told me that he had relapsed from his medications and is now normal. He was a good writer.
+He wrote a lot of poems and his voccabulary was extraordinary.
+</p>
+
+<p>Now the second guy i've know is from uni. He currently discontinued his course from my college 
+and joined another course some place very far from here. He used to take a lot of medications including pills for
+sleeping etc. During the first few times when i met him, he got really angry even at small things. One time 
+he told me that he also suffered from schezophrenia and he got a lot of hallucinations too.
+He too tried to end his life after he broke up with his girl but luckly survived. He was a good photographer
+and a good listener too. He used to listen to my troubles and gave me some good advice.
+</p>   
+<p>The third person is actually a girl whom i loved back then. When i confessed my feelings she rejected me 
+    and after that we became good friends. She was also good at english too. Sometimes while we chat when she gets
+    really angry, she switches from malayalam to english and starts cursing me in the same.
+    Only after a long time she revealed that she was a psycho and suffered from dissociative identity
+    disorder aka multiple personality disorder. Now every thing makes sense. She had a lot of friends even 
+    though she was an introvert and she manages every one of them well. It's like she has a different 
+    personality for each of her friends! We are not friends anymore after we got into a big fight over 
+    some silly thing. If I need to talk to her, I have to contact her first and she barely will contact me first.
+    Once we start talking, she will yap for hours about the things she did and the kinds of people she met.
+    I listened to her very curiosly even though I didn't had much to share.She is also very intelligent
+    and knows how to read people well.
+</p> 
+<p><strong>The extrovert</strong>: This guy whom I'm still friends with is good in interacting with people.
+Even when we're walking in some place he always stopped at times to talk with the people we've found
+in the way. It's like he was friends with everyone. One time he tells me that even though he 
+take a lot of effort talking to a person, sometimes he doesn't get the same response back and it makes him 
+a bit sad. He is one among the nicest guys i've ever known except there is one problem.
+Most of the times he will take hours to reply back to my texts and sometimes he also won't take my
+calls.</p>
+<p><strong>The introvert</strong>: R is still one of my best friends. I get to know him while we had our 12th standard final
+exams. Even though we were classmates i haven't talked to him much mainly due to online classes and my akwardness
+to meeting new people. He is just like me, not interacting with people much but once you get to know them
+they won't stop yapping. We talked a lot about chess, various television series when we were going to
+write our math exam while other students were preparing really hard and even some of them 
+looked at us curious why we weren't tensed about the exam. He was the guy who recommended me 
+to watch Queen's Gambit from netflix. He is a really good person and have high moral standards.
+We sometimes engage in some deep converstions that will last for hours during phone calls once a month or so.
+He also gave me good advice about relationships when I really needed it. He assured me that every person has 
+their own time and that time will come one day.
+</p>
+<p><strong>The backbenchers</strong>: I met D and F while I was staying at hostel for 1 month when i was in 
+10th standard. They were my roommates. Even though the hostel life felt like jail with strict rules 
+, both of them made my life more easier there. They don't do well in studies but they are good 
+at life as the quote says "The real world and the academic world do not operate in the same way". We did a lot 
+of nuisance at the hostel and most of the time we managed to escape from the warden's as well as the 
+teachers' eyes.
+Sometimes i visit them when i go home during vacation times at uni. </p>
+
+<p><a href="../../../../blog/2024/06/05/july27.html#top">Back to Top</a></p>
+            </div>
+        </article>
+        <hr />
+
+        
+    </main>
+            </div>
+                <footer class="footer">
+    <div class="footer__inner">
+        <div class="footer__content">
+            <span style="font-size: 14px;">&copy; 2024</span>
+            <span>
+                <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" title="This work is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License.">
+                    License
+                </a>
+            </span>
+            <span>
+                    <a href="../../../../index.xml" target="_blank" title="rss">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss">
+                            <path d="M4 11a9 9 0 0 1 9 9"></path>
+                            <path d="M4 4a16 16 0 0 1 16 16"></path>
+                            <circle cx="5" cy="19" r="1"></circle>
+                        </svg>
+                    </a>
+            </span>
+        </div>
+    </div>
+    <div class="footer__inner">
+        <div class="footer__content">
+        </div>
+    </div>
+    <div class="footer__inner">
+        <div class="footer__content">
+            <span>
+                <h5>Illustrations by &nbsp;<a target="_blank" href="https://instagram.com/sergio_kalisiak">Sergio Kalisiak</a></h5>
+            </span>
+        </div>
+    </div>
+</footer>
+        </div>
+<script type="text/javascript" src="../../../../bundle.min.8750240a1a2b5e2e02df200915140d47eadf74d9f9510dfe046bef237f486c4542dca2cd6c82d7241a01a6baf1e05afaf2385d481144ad18c0251d56db724273.js" ></script>
+    <script>
+        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+        m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+        })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+        ga('create', 'G-18TCRTW8CL', 'auto');
+        ga('send', 'pageview');
+    </script>
+    </body>
+</html>
